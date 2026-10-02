@@ -5,7 +5,6 @@ require "openssl"
 
 require_relative "identity/version"
 require_relative "identity/config"
-require_relative "identity/mint_endpoint"
 
 module Vatio
   # Signs the one credential Vatio accepts, and verifies it on the way back.
@@ -19,7 +18,6 @@ module Vatio
   #   Vatio::Identity.configure do |c|
   #     c.audience    = "acme"                        # your workspace slug
   #     c.private_key = ENV["VATIO_IDENTITY_PRIVATE_KEY"]
-  #     c.mint_api_key = ENV["VATIO_MINT_API_KEY"]
   #   end
   module Identity
     Error = Class.new(StandardError)
@@ -52,9 +50,7 @@ module Vatio
         config
       end
 
-      # A signed token for one of your users, ready to hand to the widget or
-      # return from the mint endpoint. Both channels get the same artifact --
-      # that is the whole design.
+      # A signed token for one of your users, ready to hand to the widget.
       #
       # Registered claims are merged last on purpose: a caller passing
       # `aud:` or `exp:` in `claims` is either confused or being creative with
@@ -103,35 +99,6 @@ module Vatio
         )
       rescue JWT::DecodeError
         nil
-      end
-
-      # The Rack app you mount for `auth.mint.url`. The block is the only part
-      # of this that your application alone can answer: given what the channel
-      # proved, who is that?
-      #
-      #   # config/routes.rb
-      #   mount Vatio::Identity.mint { |channel:, phone_number: nil, instagram_id: nil, username: nil|
-      #     user =
-      #       case channel
-      #       when "whatsapp" then User.find_by(phone_number: phone_number)
-      #       when "instagram" then User.find_by(instagram_id: instagram_id)
-      #       end
-      #     next nil unless user
-      #     { subject: user.id, claims: { name: user.name, email: user.email } }
-      #   }, at: "/api/vatio/identity"
-      #
-      # The block receives only the keywords it declares, so one that names
-      # just `phone_number:` answers every Instagram request with a 404.
-      # `username` is what Meta reports at the moment of asking and can be nil;
-      # match on it only if you verified it belongs to the user, because an
-      # Instagram username can be changed and then taken by somebody else.
-      #
-      # Return nil for someone you do not recognize. Vatio reads any non-2xx as
-      # "no idea who this is", the visitor stays anonymous, and the agent
-      # answers with its public tools -- which is a normal outcome, not an
-      # error anybody needs to hear about.
-      def mint(&resolver)
-        MintEndpoint.new(&resolver)
       end
 
       # The script tag, with the token on it only when somebody is signed in.

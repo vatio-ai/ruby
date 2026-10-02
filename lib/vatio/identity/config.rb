@@ -28,15 +28,10 @@ module Vatio
       # The web refreshes it on every page load anyway.
       DEFAULT_EXPIRES_IN = 3600
 
-      # The header Vatio sends the mint credential in. Matches the `headers:`
-      # example in the docs; change both together or neither.
-      DEFAULT_MINT_HEADER = "X-Api-Key"
-
-      attr_accessor :audience, :mint_api_key, :mint_header
+      attr_accessor :audience
       attr_writer :algorithm, :expires_in
 
       def initialize
-        @mint_header = DEFAULT_MINT_HEADER
         @expires_in = DEFAULT_EXPIRES_IN
       end
 
@@ -56,34 +51,6 @@ module Vatio
       # signatures, which is the same check.
       def public_key=(pem)
         @public_key = load_key(pem, "public_key")
-      end
-
-      # Vatio's own public key, from https://vatio.ai/.well-known/vatio-mint-key.
-      # Pinned rather than fetched: one key, copied once at setup.
-      def mint_public_key=(pem)
-        key = load_key(pem, "mint_public_key")
-        if key&.private?
-          raise ConfigurationError,
-            "vatio identity: mint_public_key is a PRIVATE key. It should be Vatio's public key, " \
-            "from https://vatio.ai/.well-known/vatio-mint-key"
-        end
-
-        @mint_public_key = key
-      end
-
-      def mint_public_key = @mint_public_key
-
-      # Required, and deliberately not a flag: a verifier that can be configured
-      # to skip the check is one an attacker simply does not sign for. The
-      # shared secret answers "may you ask"; only this answers "did Vatio ask".
-      def mint_public_key!
-        return @mint_public_key unless @mint_public_key.nil?
-
-        raise ConfigurationError,
-          "vatio identity: mint_public_key is required. Without it the endpoint cannot tell a " \
-          "request from Vatio apart from anyone who has your mint_api_key, and a leaked shared " \
-          "secret works forever with nothing on either side that would notice. " \
-          "Get it with `curl https://vatio.ai/.well-known/vatio-mint-key`"
       end
 
       def private_key
@@ -125,18 +92,6 @@ module Vatio
           raise ConfigurationError,
             "vatio identity: #{key.class} keys cannot sign a Vatio token; use RSA or EC"
         end
-      end
-
-      # Refuses to be absent: an open mint endpoint hands a signed identity for
-      # any customer to anyone who knows the URL.
-      def mint_api_key!
-        value = mint_api_key.to_s
-        return value unless value.strip.empty?
-
-        raise ConfigurationError,
-          "vatio identity: mint_api_key is required. Without it the mint endpoint signs a token " \
-          "for any phone number anyone posts, which is account takeover for every customer. " \
-          "Set one, put it in vatio.yml under auth.mint.headers, and ship it with `vatio secrets set`"
       end
 
       private
