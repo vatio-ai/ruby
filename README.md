@@ -9,7 +9,7 @@ identity at all — and it is also why everything dangerous about the arrangemen
 sits on *your* side of the line. This gem is that side, done once.
 
 ```ruby
-gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.2.0"
+gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.3.0"
 ```
 
 ## Setup
