@@ -9,7 +9,7 @@ identity at all — and it is also why everything dangerous about the arrangemen
 sits on *your* side of the line. This gem is that side, done once.
 
 ```ruby
-gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.3.0"
+gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.4.0"
 ```
 
 ## Setup
@@ -63,6 +63,34 @@ The moment it lands in a page cache, a CDN or `caches_action`, you are serving
 one customer's identity to the next visitor. If anything caches the page,
 render it without a token and call `window.VatioWidget.identify(token)` from an
 uncached endpoint instead.
+
+## WhatsApp and Instagram
+
+A WhatsApp or Instagram chat has no page to put a token on, so when a private
+tool needs one Vatio sends the contact a "Sign in" button. It opens
+`auth.sign_in_url` from `vatio.yml` with a `code`; sign them in the way your
+site already does, then send them back:
+
+```ruby
+# auth:
+#   public_key: identity.pub
+#   sign_in_url: https://acme.com/vatio/sign-in
+class VatioSignInsController < ApplicationController
+  before_action :authenticate_user!   # your own login
+
+  def show
+    redirect_to Vatio::Identity.sign_in_redirect_url(
+      code: params[:code],
+      subject: current_user.id,
+      claims: { name: current_user.name, phone_number: current_user.phone }
+    ), allow_other_host: true
+  end
+end
+```
+
+The token lasts a week by default (`expires_in:` to change it); when it runs
+out the button goes out again. A `phone_number` claim that matches the WhatsApp
+number skips the "is this yours?" confirmation; on Instagram it is always asked.
 
 ## Your own API, behind a private tool
 

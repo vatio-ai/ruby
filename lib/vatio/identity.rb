@@ -40,6 +40,15 @@ module Vatio
 
     Principal = Struct.new(:subject, :claims, :token, keyword_init: true)
 
+    SIGN_IN_HOST = "https://vatio.ai"
+    SIGN_IN_CODE = /\A[A-Za-z0-9_-]{16,64}\z/
+
+    # A week rather than the widget's hour. The widget gets a fresh token on
+    # every page load; a WhatsApp contact keeps this one until it expires and
+    # then has to sign in again, so an hour would mean signing in for every
+    # conversation. Pass `expires_in:` to choose otherwise.
+    SIGN_IN_EXPIRES_IN = 7 * 24 * 3600
+
     class << self
       def config
         @config ||= Config.new
@@ -120,6 +129,22 @@ module Vatio
         }.merge(attrs.transform_keys { |k| "data-#{k.to_s.tr("_", "-")}" }).compact
 
         "<script #{pairs.map { |k, v| %(#{k}="#{escape(v)}") }.join(" ")}></script>"
+      end
+
+      # Where to send someone who tapped "Sign in" on WhatsApp or Instagram,
+      # once they are signed in to your site. The page at `auth.sign_in_url`
+      # receives `?code=...`; redirect to this with that code and the same
+      # subject and claims you would put on the widget.
+      #
+      # The host is fixed on purpose. A url taken from the request would let
+      # anyone who can craft a link have your server sign a token for whoever
+      # opens it and hand it to them.
+      def sign_in_redirect_url(code:, subject:, claims: {}, expires_in: SIGN_IN_EXPIRES_IN)
+        code = code.to_s
+        raise ArgumentError, "vatio identity: not a Vatio sign-in code" unless code.match?(SIGN_IN_CODE)
+
+        token = token_for(subject: subject, claims: claims, expires_in: expires_in)
+        "#{SIGN_IN_HOST}/connect/#{code}?token=#{token}"
       end
 
       private
