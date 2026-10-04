@@ -10,6 +10,12 @@ module Vatio
     # it against the slug, so a token signed for the wrong audience is not a
     # subtly weaker token -- it is rejected outright and the visitor comes
     # through anonymous.
+    #
+    # `Vatio::Identity.configure` fills the one most apps need. An app that
+    # serves several workspaces builds one per workspace and passes it as
+    # `config:`:
+    #
+    #   Vatio::Identity::Config.new(audience: tenant.slug, public_key: tenant.vatio_public_key)
     class Config
       # An EC key names its own algorithm: the curve fixes the hash size, so
       # there is exactly one right answer and asking for it would only be a
@@ -31,8 +37,13 @@ module Vatio
       attr_accessor :audience
       attr_writer :algorithm, :expires_in
 
-      def initialize
-        @expires_in = DEFAULT_EXPIRES_IN
+      def initialize(audience: nil, private_key: nil, public_key: nil, algorithm: nil,
+                     expires_in: DEFAULT_EXPIRES_IN)
+        @audience = audience
+        @algorithm = algorithm
+        @expires_in = expires_in
+        self.private_key = private_key
+        self.public_key = public_key
       end
 
       # The PEM, not a path. Read it from an env var or Rails credentials --
@@ -58,7 +69,7 @@ module Vatio
       end
 
       def public_key
-        @public_key || private_key
+        @public_key || @private_key || raise(ConfigurationError, missing("public_key"))
       end
 
       def expires_in = Integer(@expires_in)

@@ -72,12 +72,14 @@ module Vatio
         Array(request(:get, "templates").body["templates"]).map { |item| Template.from(item) }
       end
 
-      # The identity token a message carries, signed with Vatio::Identity's
-      # key for this client's workspace. Sign once and pass it as
-      # `identity:` if you retry a call yourself: a token signed again is a
-      # different request to the idempotency check, and answers Conflict.
+      # The identity token a message carries, signed with this client's
+      # `identity` config (Vatio::Identity's unless given) for its workspace.
+      # Sign once and pass it as `identity:` if you retry a call yourself: a
+      # token signed again is a different request to the idempotency check,
+      # and answers Conflict.
       def identity_for(subject:, claims: {}, ttl: IDENTITY_TTL)
-        Identity.token_for(subject: subject, claims: claims, expires_in: ttl.to_i, audience: config.workspace!)
+        Identity.token_for(subject: subject, claims: claims, expires_in: ttl.to_i,
+                           audience: config.workspace!, config: config.identity)
       end
 
       private

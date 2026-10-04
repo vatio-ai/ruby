@@ -67,7 +67,9 @@ module Vatio
       #
       # `audience` is for Vatio::Server, which signs for the workspace its
       # server key names; everyone else leaves it to the configured slug.
-      def token_for(subject:, claims: {}, expires_in: nil, audience: nil)
+      # `config` is for an app serving several workspaces: that workspace's
+      # Config, in place of the global one.
+      def token_for(subject:, claims: {}, expires_in: nil, audience: nil, config: self.config)
         subject = subject.to_s.strip
         raise ArgumentError, "vatio identity: subject cannot be blank" if subject.empty?
 
@@ -89,7 +91,7 @@ module Vatio
       #
       # Nil is not an error. It means "not signed in", which on the web is the
       # normal state of a visitor reading a marketing page.
-      def verify(raw)
+      def verify(raw, config: self.config)
         raw = raw.to_s.strip
         return nil if raw.empty?
 
@@ -121,8 +123,8 @@ module Vatio
       # next visitor. If anything caches this page, render it without a token
       # and call `window.VatioWidget.identify(token)` from an uncached
       # endpoint instead.
-      def widget_tag(workspace:, token:, subject: nil, claims: {}, **attrs)
-        visitor = subject && token_for(subject: subject, claims: claims)
+      def widget_tag(workspace:, token:, subject: nil, claims: {}, config: self.config, **attrs)
+        visitor = subject && token_for(subject: subject, claims: claims, config: config)
         pairs = {
           "src" => "https://cdn.vatio.ai/v1/widget.js",
           "async" => "async",
@@ -142,11 +144,11 @@ module Vatio
       # The host is fixed on purpose. A url taken from the request would let
       # anyone who can craft a link have your server sign a token for whoever
       # opens it and hand it to them.
-      def sign_in_redirect_url(code:, subject:, claims: {}, expires_in: SIGN_IN_EXPIRES_IN)
+      def sign_in_redirect_url(code:, subject:, claims: {}, expires_in: SIGN_IN_EXPIRES_IN, config: self.config)
         code = code.to_s
         raise ArgumentError, "vatio identity: not a Vatio sign-in code" unless code.match?(SIGN_IN_CODE)
 
-        token = token_for(subject: subject, claims: claims, expires_in: expires_in)
+        token = token_for(subject: subject, claims: claims, expires_in: expires_in, config: config)
         "#{SIGN_IN_HOST}/connect/#{code}?token=#{token}"
       end
 

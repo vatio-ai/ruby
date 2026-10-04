@@ -19,6 +19,13 @@ module Vatio
     # else's id -- and the same reasoning applies one layer down: an endpoint
     # that accepts an id has to remember to scope it every time, forever, and
     # one that reads the token cannot forget.
+    #
+    # An app serving several workspaces says which one the request is for,
+    # and nil for one that has not connected Vatio, which is a 401:
+    #
+    #   def vatio_identity_config
+    #     current_tenant.vatio_identity_config
+    #   end
     module Authentication
       def self.included(base)
         base.helper_method(:vatio_subject, :vatio_principal) if base.respond_to?(:helper_method)
@@ -27,7 +34,8 @@ module Vatio
       def vatio_principal
         return @vatio_principal if defined?(@vatio_principal)
 
-        @vatio_principal = Identity.verify(vatio_bearer_token)
+        config = vatio_identity_config
+        @vatio_principal = config && Identity.verify(vatio_bearer_token, config: config)
       end
 
       def vatio_subject
@@ -45,6 +53,10 @@ module Vatio
       end
 
       private
+
+      def vatio_identity_config
+        Identity.config
+      end
 
       def vatio_bearer_token
         header = request.headers["Authorization"].to_s

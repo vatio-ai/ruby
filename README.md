@@ -9,7 +9,7 @@ identity at all — and it is also why everything dangerous about the arrangemen
 sits on *your* side of the line. This gem is that side, done once.
 
 ```ruby
-gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.4.0"
+gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.5.0"
 ```
 
 ## Setup
@@ -111,6 +111,51 @@ and can be talked into filling that one with someone else's id — and the same
 reasoning applies one layer down: an endpoint that accepts an id has to
 remember to scope it every time, forever; one that reads the token cannot
 forget.
+
+## Several workspaces
+
+`configure` sets one workspace for the whole app. An app that serves several —
+each customer with their own Vatio workspace and key — builds a `Config` per
+workspace instead and passes it as `config:`:
+
+```ruby
+config = Vatio::Identity::Config.new(audience: tenant.vatio_slug, public_key: tenant.vatio_public_key)
+
+Vatio::Identity.verify(token, config: config)
+```
+
+`token_for`, `widget_tag` and `sign_in_redirect_url` take it too; those sign,
+so that config needs `private_key:`. Behind a private tool, the controller
+says which workspace the request is for, and `nil` for a tenant that has not
+connected Vatio answers 401:
+
+```ruby
+class Api::BookingsController < ApplicationController
+  include Vatio::Identity::Authentication
+  before_action :authenticate_vatio!
+
+  private
+
+  def vatio_identity_config
+    return if current_tenant.vatio_public_key.blank?
+
+    Vatio::Identity::Config.new(audience: current_tenant.vatio_slug, public_key: current_tenant.vatio_public_key)
+  end
+end
+```
+
+Pick the tenant from the request — the host, the path — and never from the
+token's own `aud`: the token is what is being checked.
+
+A server client for another workspace takes its identity config the same way,
+so a `subject:` is signed with that workspace's key:
+
+```ruby
+Vatio::Server::Client.new(server_key: tenant.vatio_server_key, workspace: tenant.vatio_slug,
+  identity: Vatio::Identity::Config.new(audience: tenant.vatio_slug, private_key: tenant.vatio_private_key))
+```
+
+`SendMessageJob` always uses the global configuration.
 
 ## Server API (messages)
 

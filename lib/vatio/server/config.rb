@@ -21,23 +21,31 @@ module Vatio
       # `webhook_secret` is the endpoint's `whsec_`, read by WebhookReceiver
       # unless the controller defines `vatio_webhook_secret` itself.
       attr_accessor :server_key, :base_url, :open_timeout, :read_timeout, :webhook_secret
-      attr_writer :workspace
+      attr_writer :workspace, :identity
 
       def initialize(server_key: nil, workspace: nil, base_url: DEFAULT_BASE_URL,
-                     open_timeout: DEFAULT_OPEN_TIMEOUT, read_timeout: DEFAULT_READ_TIMEOUT, webhook_secret: nil)
+                     open_timeout: DEFAULT_OPEN_TIMEOUT, read_timeout: DEFAULT_READ_TIMEOUT, webhook_secret: nil,
+                     identity: nil)
         @server_key = server_key
         @workspace = workspace
+        @identity = identity
         @base_url = base_url
         @open_timeout = open_timeout
         @read_timeout = read_timeout
         @webhook_secret = webhook_secret
       end
 
-      # The slug, falling back to Vatio::Identity's audience: it is the same
+      # The Vatio::Identity::Config that signs `subject:` identities. The
+      # global one unless this client is for another workspace's key.
+      def identity
+        @identity || Identity.config
+      end
+
+      # The slug, falling back to the identity's audience: it is the same
       # workspace, and saying it twice is a chance to say it differently.
       def workspace
         value = @workspace.to_s.strip
-        value = Identity.config.audience.to_s.strip if value.empty?
+        value = identity.audience.to_s.strip if value.empty?
         value.empty? ? nil : value
       end
 
