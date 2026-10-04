@@ -64,14 +64,17 @@ module Vatio
       # Registered claims are merged last on purpose: a caller passing
       # `aud:` or `exp:` in `claims` is either confused or being creative with
       # someone else's session, and neither is worth honouring.
-      def token_for(subject:, claims: {}, expires_in: nil)
+      #
+      # `audience` is for Vatio::Server, which signs for the workspace its
+      # server key names; everyone else leaves it to the configured slug.
+      def token_for(subject:, claims: {}, expires_in: nil, audience: nil)
         subject = subject.to_s.strip
         raise ArgumentError, "vatio identity: subject cannot be blank" if subject.empty?
 
         now = Time.now.to_i
         payload = stringify(claims).merge(
           "sub" => subject,
-          "aud" => config.audience!,
+          "aud" => audience.to_s.strip.empty? ? config.audience! : audience.to_s.strip,
           "iat" => now,
           "exp" => now + (expires_in || config.expires_in).to_i
         )

@@ -112,11 +112,245 @@ reasoning applies one layer down: an endpoint that accepts an id has to
 remember to scope it every time, forever; one that reads the token cannot
 forget.
 
+## Server API (messages)
+
+Everything above runs without a network call. This part is the opposite: a
+client for the server API, which has the agent write to someone first on
+WhatsApp — an order that shipped, an appointment tomorrow, a quote that is
+ready — and the receiver for the webhooks that say how it went. It is a
+separate require, so an app that only signs tokens never loads it:
+
+```ruby
+# config/initializers/vatio.rb
+require "vatio/server"
+
+Vatio::Server.configure do |c|
+  c.server_key     = ENV.fetch("VATIO_SERVER_KEY")       # vsk_..., from `vatio keys create`
+  c.workspace      = "acme"                               # defaults to Vatio::Identity's audience
+  c.webhook_secret = ENV["VATIO_WEBHOOK_SECRET"]          # whsec_..., for the receiver below
+end
+```
+
+A server key belongs to one workspace and one environment, and a preview key
+can only write to a test phone verified on the console's Channels page. Keep
+it on your server: it can message your customers. Net::HTTP does the talking
+(`base_url`, `open_timeout` and `read_timeout` are there if you need them);
+there is no other dependency.
+
+### Sending
+
+```ruby
+message = Vatio::Server.send_message(
+  to: "+56912345678",
+  brief: "Order #1042 shipped today with Starken, tracking 99812. Offer to send the tracking link.",
+  external_ref: "order-1042-shipped"
+)
+message.queued?   # => true -- recorded and on its way
+message.id        # => 81
+```
+
+What goes out depends on WhatsApp's 24-hour window, which Vatio checks for
+you:
+
+- **`brief:`** — the agent writes the message, and on every later turn it is
+  shown why it wrote, so "yes, send it" gets an answer that knows what "it"
+  is. Write it the way you would brief a colleague: the agent uses no facts
+  beyond the brief and its tools.
+- **`text:`** — your own words, sent as is.
+- **`template:`** — `{ name:, language:, params: [] }`, used only when the
+  window is closed, because then WhatsApp delivers nothing else. Send it
+  along with the brief to always reach the person. `Vatio::Server.templates`
+  lists what the number can send, with each body's parameter count:
+
+  ```ruby
+  shipped = Vatio::Server.templates.find { |t| t.name == "order_shipped" }
+  Vatio::Server.send_message(to: phone, brief: brief, template: shipped.with_params("Ana", "#1042"))
+  ```
+
+The response only says it is queued: the agent's turn and Meta's delivery
+both happen after it. `Vatio::Server.message_status(id)` reads it back,
+with `content` (what reached the phone) once it is sent, and
+`Vatio::Server.messages(external_ref:, status:, limit:, before:)` lists
+them, newest first — or, better, the webhook tells you.
+
+**Who it is.** If the person is one of your users, pass `subject:` (and
+`claims:`, as for the widget) and the message carries an identity signed
+with your key, so a private tool can run when they answer:
+
+```ruby
+Vatio::Server.send_message(to: user.phone, brief: brief, external_ref: "invoice-#{invoice.id}-due",
+  subject: user.id, claims: { name: user.name })
+```
+
+The token's `exp` is `identity_ttl` from now, 48 hours by default, and it has
+to cover how long the person may take to answer: past it, they are answered
+as a stranger. Pass a longer one for a message people sit on. Or sign it
+yourself and pass `identity:`.
+
+### Idempotency
+
+A request that timed out may still have gone through, so a retry has to be
+safe. It is when it carries an idempotency key: the same key with the same
+request answers with the message the first one made (`replayed?` is true)
+and sends nothing. `idempotency_key:` defaults to `external_ref:`, so give
+each *message* its own ref — `"order-1042-shipped"`, not `"order-1042"` —
+or pass a key explicitly. The same key with a different request is a
+`Conflict`, not a second message.
+
+If you retry a call with `subject:` yourself, sign once with
+`Vatio::Server.identity_for(subject:, claims:)` and pass that as `identity:`:
+a token signed again is a different request to that check.
+
+### Errors
+
+Every refusal raises a `Vatio::Server::Error` with `code`, `message`,
+`status`, `details` and `request_id` (quote it when you ask us about one).
+The subclasses are the decisions you actually make:
+
+```ruby
+begin
+  Vatio::Server.send_message(to: phone, brief: brief, external_ref: ref)
+rescue Vatio::Server::OutsideWindow => e
+  # Has not written in 24 hours and no template was sent. Only you know
+  # whether a template is the right thing instead. e.last_inbound_at
+rescue Vatio::Server::OptedOut, Vatio::Server::HumanAnswering
+  # They asked not to be written to, or a person has the conversation
+  # (human_takeover, handoff_pending). Leave it.
+rescue Vatio::Server::RateLimited, Vatio::Server::Unavailable => e
+  # e.retryable? is true for these two only. Retry with the same key.
+end
+```
+
+| Class | When |
+|---|---|
+| `OutsideWindow` | `outside_window`, with `last_inbound_at` |
+| `OptedOut` | `opted_out` |
+| `HumanAnswering` | `human_takeover`, `handoff_pending` |
+| `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_required` |
+| `InvalidRequest` | Any other 422: `invalid_recipient`, `content_required`, `invalid_identity`, `not_a_test_phone`… |
+| `Unauthorized` | 401 / 403: the key is wrong, revoked, or another workspace's |
+| `Conflict` | Any other 409: `idempotency_conflict` (`details["message_id"]`), `identity_conflict`, `whatsapp_not_connected`, `whatsapp_paused` |
+| `NotFound` | `message_status` with an id this key cannot see |
+| `RateLimited` | 429, more than 60 a minute on one key |
+| `Unavailable` | 5xx, timeouts, refused connections |
+
+A missing `server_key` or `workspace` is a `Vatio::Server::ConfigurationError`,
+not one of these: it is your bug, not Vatio's answer.
+
+### ActiveJob
+
+Where ActiveJob is loaded, `Vatio::Server::SendMessageJob` takes the same
+keywords:
+
+```ruby
+Vatio::Server::SendMessageJob.perform_later(to: order.phone, brief: brief,
+  external_ref: "order-#{order.id}-shipped", subject: order.user_id)
+```
+
+It retries `RateLimited` and `Unavailable` with backoff, ten attempts over
+about four hours, and never the rest — a closed window is the same answer
+on the tenth try — which it logs and discards. To act on one, subclass and
+`discard_on` it; the later declaration wins:
+
+```ruby
+class ShippedJob < Vatio::Server::SendMessageJob
+  discard_on(Vatio::Server::OutsideWindow) { |job, error| ShippedMailer.notify(job.arguments.first[:to]).deliver_later }
+end
+```
+
+Pass an `external_ref` or `idempotency_key` so a retry is a replay rather than
+a second message; without one the job makes a key when it is enqueued. An
+identity for `subject:` is signed at enqueue as well, once, for the same
+reason — which means it waits in your queue, and its `exp` counts from then.
+
+### Webhooks
+
+Vatio POSTs `message.sent`, `message.failed`, `message.delivered`,
+`message.read`, `message.delivery_failed` and `message.replied` to your
+endpoint, signed with its `whsec_` secret. `data["message"]` is the message
+as `message_status` returns it, and `message.replied` adds `data["reply"]`
+(`chat_message_id`, `content`, `at`):
+
+```ruby
+# config/routes.rb
+post "/webhooks/vatio", to: "vatio_webhooks#create"
+
+class VatioWebhooksController < ActionController::API
+  include Vatio::Server::WebhookReceiver
+
+  on_vatio_event "message.replied" do |event|
+    next if ProcessedEvent.exists?(event_id: event["id"])
+
+    message = Vatio::Server::Message.from(event["data"]["message"])
+    Order.find_by(ref: message.external_ref)&.update!(customer_replied_at: message.replied_at)
+    ProcessedEvent.create!(event_id: event["id"])
+  end
+end
+```
+
+The receiver checks `Vatio-Signature` against the raw body and refuses a
+delivery more than five minutes old, so a captured one cannot be replayed;
+it answers 400 to anything that does not verify and 200 otherwise. Define
+`vatio_webhook_secret` in the controller to read the secret from elsewhere,
+or override `handle_vatio_event(event)` to see every event. Outside Rails,
+`Vatio::Server::Webhook.verify!(payload:, signature:, secret:)` returns the
+parsed event or raises `Webhook::InvalidSignature`.
+
+**Delivery is at least once.** A delivery your server took too long to
+answer is sent again, with the same `event["id"]`: dedupe on it. A handler
+that raises answers 500 and the delivery is retried later, which is what you
+want when your database was down — and why a handler should be safe to run
+twice.
+
+### Testing
+
+```ruby
+require "vatio/server/testing"
+
+setup    { Vatio::Server::Testing.fake! }
+teardown { Vatio::Server::Testing.real! }
+
+test "shipping tells the customer" do
+  Order.ship!(order)
+  sent = Vatio::Server::Testing.messages.last
+  assert_equal "order-#{order.id}-shipped", sent.external_ref
+  assert_equal order.user_id.to_s, sent.subject
+end
+
+test "a closed window falls back to email" do
+  Vatio::Server::Testing.fail_next!(:outside_window)
+  assert_emails(1) { Order.ship!(order) }
+end
+```
+
+`fake!` swaps the HTTP transport for an in-memory one — no network, no key
+needed — that answers as the API does: a queued message, a replay for a key
+it has seen, `Conflict` for one reused with a different request. The answers
+go through the same parsing and error mapping as real ones, so what your code
+rescues in a test is what it rescues in production. `fail_next!` takes any
+refusal code (or `:timeout`); `window_open = false` makes a message without
+a template raise `OutsideWindow`; `templates =` sets what `templates`
+returns; `webhook("message.replied", message: {...})` builds a signed
+request for testing your receiver. With RSpec loaded:
+
+```ruby
+expect { Order.ship!(order) }.to have_sent_message(to: order.phone, brief: a_string_including("#1042"))
+```
+
+See [Messages](https://docs.vatio.ai/api/messages) for the API itself.
+
 ## What it does not do
 
-Rotate keys, cache tokens, or talk to Vatio. Verification is repeated on every
-gate by design, so there is no conclusion worth caching: a token cached as
-"valid" has its `exp` checked exactly once.
+Rotate keys, or cache tokens. Verification is repeated on every gate by
+design, so there is no conclusion worth caching: a token cached as "valid"
+has its `exp` checked exactly once.
+
+`vatio/identity` never talks to Vatio: signing and verifying are local, and
+nothing about the widget or your private tools makes a request from here.
+`vatio/server` is the one part that does, only when you require it and call
+it, and it does not retry on its own — a retry belongs to whoever knows
+whether the message still makes sense, which is why `SendMessageJob` is where
+the retries are.
 
 ## Issues
 
