@@ -79,6 +79,11 @@ class VatioSignInsController < ApplicationController
   before_action :authenticate_user!   # your own login
 
   def show
+    # Back from a Turbo login form: fetch cannot follow a redirect to vatio.ai.
+    if request.headers["X-Turbo-Request-Id"]
+      return render html: helpers.tag.meta(name: "turbo-visit-control", content: "reload")
+    end
+
     redirect_to Vatio::Identity.sign_in_redirect_url(
       code: params[:code],
       subject: current_user.id,
@@ -91,6 +96,11 @@ end
 The token lasts a week by default (`expires_in:` to change it); when it runs
 out the button goes out again. A `phone_number` claim that matches the WhatsApp
 number skips the "is this yours?" confirmation; on Instagram it is always asked.
+
+Keep the Turbo lines if your login form uses Turbo: after signing in, the form's
+`fetch` follows the redirect back here and cannot follow the next one to
+vatio.ai, so the login page would just sit there. The reload makes it a real
+page load.
 
 ## Your own API, behind a private tool
 
