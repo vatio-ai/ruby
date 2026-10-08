@@ -56,7 +56,7 @@ claims: {
 }
 ```
 
-See [Enrich the inbox](https://docs.vatio.ai/authentication/#enrich-the-inbox).
+See [Enrich the inbox](https://vatio.ai/docs/authentication/#enrich-the-inbox).
 
 **Watch the cache.** Rails renders this per request, so it is safe by default.
 The moment it lands in a page cache, a CDN or `caches_action`, you are serving
@@ -392,7 +392,7 @@ request for testing your receiver. With RSpec loaded:
 expect { Order.ship!(order) }.to have_sent_message(to: order.phone, brief: a_string_including("#1042"))
 ```
 
-See [Messages](https://docs.vatio.ai/api/messages) for the API itself.
+See [Messages](https://vatio.ai/docs/api/messages) for the API itself.
 
 ## What it does not do
 

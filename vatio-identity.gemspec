@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.metadata = {
     "source_code_uri" => "https://github.com/vatio-ai/ruby",
     "bug_tracker_uri" => "https://github.com/vatio-ai/ruby/issues",
-    "documentation_uri" => "https://docs.vatio.ai/authentication/sessions"
+    "documentation_uri" => "https://vatio.ai/docs/authentication/sessions"
   }
 
   spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE.txt"]
