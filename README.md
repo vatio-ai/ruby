@@ -1,4 +1,4 @@
-# vatio-identity
+# vatio-sdk
 
 Signs and verifies the one credential a Vatio workspace authenticates its users
 with: a JWT your application signed with its own private key.
@@ -9,8 +9,14 @@ identity at all — and it is also why everything dangerous about the arrangemen
 sits on *your* side of the line. This gem is that side, done once.
 
 ```ruby
-gem "vatio-identity", git: "https://github.com/vatio-ai/ruby", tag: "0.5.0"
+gem "vatio-sdk", "~> 0.6"
 ```
+
+On [RubyGems](https://rubygems.org/gems/vatio-sdk) from 0.6.0. Until then it was
+called `vatio-identity` and installed from git; a Gemfile that still says
+`gem "vatio-identity", git: "https://github.com/vatio-ai/ruby"` keeps working
+and installs this, so switch when you next touch it. The code, the requires and the `Vatio::Identity` and
+`Vatio::Server` modules did not change.
 
 ## Setup
 

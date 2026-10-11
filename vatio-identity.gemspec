@@ -1,33 +1,22 @@
 # frozen_string_literal: true
 
+# The gem's name until 0.6.0. Kept so a Gemfile that still says
+# `gem "vatio-identity", git: "https://github.com/vatio-ai/ruby"` installs
+# vatio-sdk instead of failing; it ships no code of its own.
+
 require_relative "lib/vatio/identity/version"
 
 Gem::Specification.new do |spec|
   spec.name = "vatio-identity"
   spec.version = Vatio::Identity::VERSION
   spec.authors = [ "Urcalab" ]
-  spec.summary = "Sign and verify the JWT a Vatio workspace authenticates its users with, and call its server API."
-  spec.description = <<~TEXT
-    Vatio holds only the public half of your signing key, so it can verify a
-    token and never mint one. Everything dangerous about that arrangement is
-    therefore on your side: this gem signs the token for the widget and
-    verifies the same token back on your own API.
-
-    `require "vatio/server"` adds the opt-in client for the server API --
-    having the agent write to a contact first on WhatsApp -- and the
-    receiver for its signed webhooks, on Net::HTTP and nothing else.
-  TEXT
+  spec.summary = "Renamed to vatio-sdk."
   spec.homepage = "https://github.com/vatio-ai/ruby"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0"
-  spec.metadata = {
-    "source_code_uri" => "https://github.com/vatio-ai/ruby",
-    "bug_tracker_uri" => "https://github.com/vatio-ai/ruby/issues",
-    "documentation_uri" => "https://vatio.ai/docs/authentication/sessions"
-  }
 
-  spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE.txt"]
+  spec.files = []
   spec.require_paths = [ "lib" ]
 
-  spec.add_dependency "jwt", ">= 2.7"
+  spec.add_dependency "vatio-sdk", Vatio::Identity::VERSION
 end

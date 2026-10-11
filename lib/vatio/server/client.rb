@@ -99,7 +99,7 @@ module Vatio
             "Authorization" => "Bearer #{config.server_key!}",
             "Accept" => "application/json",
             "Content-Type" => "application/json",
-            "User-Agent" => "vatio-identity-ruby/#{Identity::VERSION}"
+            "User-Agent" => "vatio-sdk-ruby/#{Identity::VERSION}"
           }.merge(headers),
           body: body && JSON.generate(body),
           open_timeout: config.open_timeout,
