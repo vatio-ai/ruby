@@ -193,7 +193,7 @@ end
 ```
 
 A server key belongs to one workspace and one environment, and a preview key
-can only write to a test phone verified under Test → WhatsApp in the console. Keep
+can only write to a test phone verified on the inbox's Test page (WhatsApp). Keep
 it on your server: it can message your customers. Net::HTTP does the talking
 (`base_url`, `open_timeout` and `read_timeout` are there if you need them);
 there is no other dependency.
