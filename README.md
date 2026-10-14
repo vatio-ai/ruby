@@ -8,6 +8,11 @@ That is the property that makes it reasonable for a platform to be verifying
 identity at all — and it is also why everything dangerous about the arrangement
 sits on *your* side of the line. This gem is that side, done once.
 
+Building your app with Claude Code, Cursor or Codex? Start with
+`npx @vatio-ai/skills` and `/vatio-init` in its project. When the agent needs to
+know who your users are and your backend is Rails, your coding agent can set
+this gem up for it. See [vatio.ai](https://vatio.ai).
+
 ```ruby
 gem "vatio-sdk", "~> 0.6"
 ```
