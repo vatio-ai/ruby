@@ -335,7 +335,9 @@ Vatio POSTs `message.sent`, `message.failed`, `message.delivered`,
 `message.read`, `message.delivery_failed` and `message.replied` to your
 endpoint, signed with its `whsec_` secret. `data["message"]` is the message
 as `message_status` returns it, and `message.replied` adds `data["reply"]`
-(`chat_message_id`, `content`, `at`):
+(`chat_message_id`, `content`, `at`). `feedback.submitted` is a visitor's
+rating of a conversation, with `data["feedback"]`, `data["chat"]` and
+`data["contact"]` ([payload](https://vatio.ai/docs/api/webhooks#ratings)):
 
 ```ruby
 # config/routes.rb

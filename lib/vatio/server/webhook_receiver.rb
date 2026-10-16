@@ -38,7 +38,8 @@ module Vatio
       module ClassMethods
         # One or more event types -- message.sent, message.failed,
         # message.delivered, message.read, message.delivery_failed,
-        # message.replied, ping. The block runs on the controller instance.
+        # message.replied, feedback.submitted, ping. The block runs on the
+        # controller instance.
         def on_vatio_event(*types, &handler)
           raise ArgumentError, "vatio server: on_vatio_event needs a block" unless handler
 
