@@ -28,6 +28,8 @@ module Vatio
       # text:     your own words, sent as is.
       # template: { name:, language:, params: [] }, used only when the 24-hour
       #           window is closed -- send it too to always reach the person.
+      #           An authentication template takes `code:` instead of params,
+      #           with no brief or text, and is sent whatever the window.
       #
       # idempotency_key defaults to external_ref. Same key, same request:
       # Vatio answers with the message the first one made and sends nothing
@@ -128,7 +130,8 @@ module Vatio
       # Accepts a Hash with symbol or string keys, or anything with `to_h`.
       def normalize_template(template)
         hash = template.to_h.transform_keys(&:to_s)
-        { name: hash["name"], language: hash["language"], params: Array(hash["params"]).map(&:to_s) }
+        { name: hash["name"], language: hash["language"], params: Array(hash["params"]).map(&:to_s),
+          code: hash["code"]&.to_s }.compact
       end
 
       def present(value)
