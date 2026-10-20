@@ -35,6 +35,7 @@ module Vatio
       # are read back out of the identity token, unverified.
       Recorded = Struct.new(
         :id, :to, :brief, :text, :template, :external_ref, :idempotency_key, :identity, :subject, :claims, :mode,
+        :channel, :comment_id,
         keyword_init: true
       )
 
@@ -47,7 +48,11 @@ module Vatio
         "invalid_recipient" => 422, "not_a_test_phone" => 422, "identity_not_configured" => 422,
         "invalid_identity" => 422, "whatsapp_not_connected" => 409, "whatsapp_paused" => 409,
         "idempotency_conflict" => 409, "identity_conflict" => 409, "invalid_key" => 401,
-        "workspace_forbidden" => 403, "not_found" => 404, "rate_limited" => 429, "unavailable" => 503
+        "workspace_forbidden" => 403, "not_found" => 404, "rate_limited" => 429, "unavailable" => 503,
+        "instagram_not_connected" => 409, "unknown_recipient" => 422, "templates_not_supported" => 422,
+        "not_a_test_account" => 422, "comment_not_found" => 404, "comment_reply_expired" => 422,
+        "comment_already_replied" => 409, "comment_recipient_mismatch" => 422, "comments_not_enabled" => 409,
+        "comments_need_live_key" => 409
       }.freeze
 
       # `fail_next!(:timeout)` and `fail_next!(:network_error)` raise in the
@@ -55,7 +60,7 @@ module Vatio
       NETWORK_FAILURES = %w[timeout network_error].freeze
 
       class << self
-        attr_writer :templates, :window_open
+        attr_writer :templates, :window_open, :instagram_comments
 
         # Swaps the transport for the in-memory one, and fills a key and a
         # workspace if the suite has none, so no test needs a real `vsk_`.
@@ -95,6 +100,7 @@ module Vatio
         def reset!
           @templates = []
           @window_open = true
+          @instagram_comments = []
           fake.reset! if faking?
         end
 
@@ -118,6 +124,11 @@ module Vatio
         def templates = @templates || []
 
         def window_open? = @window_open != false
+
+        # What `Vatio::Server.instagram_comments` answers, and the comments a
+        # `send_message(comment_id:)` can reply to: Hashes as the API sends
+        # them (`id`, `text`, `from`, ...).
+        def instagram_comments = @instagram_comments || []
 
         # A webhook request as Vatio would deliver it, for testing your
         # receiver: post `body` with `headers` to its route.
@@ -194,6 +205,7 @@ module Vatio
           if method == "post" && path == "messages" then create(params, headers["Idempotency-Key"])
           elsif method == "get" && path == "messages" then list(query)
           elsif method == "get" && path == "templates" then json(200, { templates: Testing.templates.map(&:to_h) })
+          elsif method == "get" && path == "instagram/comments" then comments(query)
           elsif shown && @payloads[shown.to_i] then json(200, @payloads[shown.to_i])
           elsif shown then refusal(404, "not_found", "Resource not found")
           else refusal(404, "not_found", "No such endpoint in Vatio::Server::Testing: #{method.upcase} #{path}")
@@ -210,12 +222,31 @@ module Vatio
           end
 
           to = params["to"].to_s
-          return refusal(422, "invalid_recipient", "to must be a phone number in international format.") if to.gsub(/\D/, "").length < 8
+          comment = nil
+          if params["comment_id"]
+            comment = Testing.instagram_comments.map { |item| item.transform_keys(&:to_s) }
+              .find { |item| item["id"].to_s == params["comment_id"].to_s }
+            return refusal(404, "comment_not_found", "No comment #{params["comment_id"]}.") unless comment
+            if @messages.any? { |message| message.comment_id == params["comment_id"].to_s }
+              return refusal(409, "comment_already_replied", "Comment #{params["comment_id"]} already has its private reply.")
+            end
+
+            to = "@#{comment.dig("from", "username") || comment.dig("from", "id")}"
+          end
+          instagram = params["channel"].to_s == "instagram" || !comment.nil?
+          if comment
+            return refusal(422, "templates_not_supported", "Instagram has no message templates.") if params["template"]
+          elsif instagram
+            return refusal(422, "invalid_recipient", "to must be an Instagram @username or id.") unless to.match?(/\A@?[A-Za-z0-9._]{1,32}\z/)
+            return refusal(422, "templates_not_supported", "Instagram has no message templates.") if params["template"]
+          elsif to.gsub(/\D/, "").length < 8
+            return refusal(422, "invalid_recipient", "to must be a phone number in international format.")
+          end
           if params["brief"].to_s.strip.empty? && params["text"].to_s.strip.empty?
             return refusal(422, "content_required", "Send `text` or `brief`.")
           end
 
-          mode = if Testing.window_open? then params["text"] ? "text" : "agent"
+          mode = if comment || Testing.window_open? then params["text"] ? "text" : "agent"
           elsif params["template"] then "template"
           end
           unless mode
@@ -230,8 +261,8 @@ module Vatio
 
           id = (@next_id += 1)
           payload = {
-            id: id, status: "queued", mode: mode, channel: "whatsapp", environment: "live",
-            to: "+#{to.gsub(/\D/, "")}", chat_id: id, external_ref: params["external_ref"], idempotency_key: key,
+            id: id, status: "queued", mode: mode, channel: instagram ? "instagram" : "whatsapp", environment: "live",
+            to: instagram ? to : "+#{to.gsub(/\D/, "")}", comment_id: comment && comment["id"].to_s, chat_id: id, external_ref: params["external_ref"], idempotency_key: key,
             brief: params["brief"], text: text, template: template, content: nil, chat_message_id: nil,
             delivery: nil, error: nil, sent_at: nil, replied_at: nil, created_at: Time.now.utc.iso8601
           }
@@ -241,9 +272,18 @@ module Vatio
             id: id, to: params["to"], brief: params["brief"], text: params["text"], template: params["template"],
             external_ref: params["external_ref"], idempotency_key: key, identity: params["identity"],
             subject: claims["sub"], claims: claims.reject { |name, _| Identity::REGISTERED_CLAIMS.include?(name) },
-            mode: mode
+            mode: mode, channel: instagram ? "instagram" : "whatsapp", comment_id: comment && comment["id"].to_s
           ).freeze
           json(202, payload)
+        end
+
+        def comments(query)
+          items = Testing.instagram_comments.map { |item| JSON.parse(JSON.generate(item)) }
+          if query["replyable"] == "true"
+            replied = @messages.filter_map(&:comment_id)
+            items = items.reject { |item| replied.include?(item["id"].to_s) }
+          end
+          json(200, { comments: items.first((query["limit"] || 50).to_i.clamp(1, 50)), next_before: nil })
         end
 
         def list(query)

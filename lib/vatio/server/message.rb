@@ -35,7 +35,7 @@ module Vatio
     # once there is one. Nested hashes (`template`, `delivery`, `error`) keep
     # the API's string keys.
     Message = Struct.new(
-      :id, :status, :mode, :channel, :environment, :to, :chat_id, :external_ref, :idempotency_key,
+      :id, :status, :mode, :channel, :environment, :to, :comment_id, :chat_id, :external_ref, :idempotency_key,
       :brief, :text, :template, :content, :chat_message_id, :delivery, :error, :sent_at, :replied_at,
       :created_at, :replayed,
       keyword_init: true
@@ -56,6 +56,38 @@ module Vatio
       def replied? = !replied_at.nil?
 
       def error_code = error && error["code"]
+    end
+
+    # A comment on your Instagram posts, which a private reply answers:
+    # `send_message(comment_id: comment.id, brief: ...)`. `from` is
+    # `{"id", "username"}`, `media` `{"id", "product_type"}`. `reply_until` is
+    # when Instagram stops taking the reply; `replied_message_id` the message
+    # that took it, once one did.
+    InstagramComment = Struct.new(
+      :id, :text, :from, :media, :parent_id, :live, :created_at, :reply_until, :replied_message_id,
+      keyword_init: true
+    ) do
+      def self.from(hash)
+        hash = (hash || {}).transform_keys(&:to_s)
+        times = %w[created_at reply_until].to_h { |key| [ key, Value.time(hash[key]) ] }
+        Value.build(self, hash.merge(times))
+      end
+
+      def username = from && from["username"]
+      def replied? = !replied_message_id.nil?
+      def replyable?(now: Time.now) = !replied? && !reply_until.nil? && now < reply_until
+    end
+
+    InstagramCommentList = Struct.new(:comments, :next_before, keyword_init: true) do
+      include Enumerable
+
+      def self.from(hash)
+        hash = (hash || {}).transform_keys(&:to_s)
+        new(comments: Array(hash["comments"]).map { |item| InstagramComment.from(item) }.freeze,
+            next_before: hash["next_before"]).freeze
+      end
+
+      def each(&) = comments.each(&)
     end
 
     # One page of `messages`, newest first. Pass `next_before` back as

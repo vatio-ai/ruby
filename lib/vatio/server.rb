@@ -69,6 +69,7 @@ module Vatio
       def message_status(id) = client.message_status(id)
       def messages(**filters) = client.messages(**filters)
       def templates = client.templates
+      def instagram_comments(**filters) = client.instagram_comments(**filters)
       def identity_for(**options) = client.identity_for(**options)
     end
   end

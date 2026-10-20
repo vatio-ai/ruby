@@ -24,6 +24,15 @@ module Vatio
       # later -- read it back with `message_status` or hear about it on your
       # webhook.
       #
+      # to:       a phone number, or on Instagram the person's @username or
+      #           Instagram-scoped id.
+      # channel:  "whatsapp" (the default) or "instagram". An Instagram DM
+      #           only reaches someone who wrote in the last 24 hours, and
+      #           takes no template.
+      # comment_id: an Instagram comment on your posts (an `instagram.comment`
+      #           webhook, or `instagram_comments`): a private reply, the one
+      #           DM Instagram lets you send whoever wrote it, within 7 days.
+      #           Needs no `to` or `channel`.
       # brief:    what the agent should write about, and the facts to use.
       # text:     your own words, sent as is.
       # template: { name:, language:, params: [] }, used only when the 24-hour
@@ -40,14 +49,16 @@ module Vatio
       # now + identity_ttl), so a private tool can run when they answer. The
       # exp has to cover how long they may take to: past it, they are
       # answered as a stranger. Or pass a token you signed as `identity:`.
-      def send_message(to:, brief: nil, text: nil, template: nil, external_ref: nil, idempotency_key: nil,
-                       subject: nil, claims: {}, identity_ttl: IDENTITY_TTL, identity: nil)
+      def send_message(to: nil, channel: nil, comment_id: nil, brief: nil, text: nil, template: nil, external_ref: nil,
+                       idempotency_key: nil, subject: nil, claims: {}, identity_ttl: IDENTITY_TTL, identity: nil)
         raise ArgumentError, "vatio server: pass subject: or identity:, not both" if subject && identity
 
         identity ||= identity_for(subject: subject, claims: claims, ttl: identity_ttl) if subject
         key = present(idempotency_key) || present(external_ref)
         body = {
-          to: to.to_s,
+          to: to&.to_s,
+          channel: channel&.to_s,
+          comment_id: comment_id&.to_s,
           brief: brief,
           text: text,
           template: template && normalize_template(template),
@@ -68,6 +79,13 @@ module Vatio
       def messages(external_ref: nil, status: nil, limit: nil, before: nil)
         query = { external_ref: external_ref, status: status, limit: limit, before: before }.compact
         MessageList.from(request(:get, "messages", query: query).body)
+      end
+
+      # Comments on your Instagram posts, newest first, up to 50 a page.
+      # `replyable: true` keeps the ones still waiting for a private reply.
+      def instagram_comments(replyable: nil, media_id: nil, limit: nil, before: nil)
+        query = { replyable: replyable, media_id: media_id, limit: limit, before: before }.compact
+        InstagramCommentList.from(request(:get, "instagram/comments", query: query).body)
       end
 
       def templates
