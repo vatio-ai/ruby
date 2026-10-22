@@ -62,10 +62,9 @@ module Vatio
     # `send_message(comment_id: comment.id, brief: ...)`. `from` is
     # `{"id", "username"}`, `media` `{"id", "product_type"}`. `reply_until` is
     # when Instagram stops taking the reply; `replied_message_id` the message
-    # that took it, once one did. `auto_reply` is `{"status", "reason"}` when
-    # Vatio decided itself (Channels → Instagram → Answer comments by DM).
+    # that took it, once one did.
     InstagramComment = Struct.new(
-      :id, :text, :from, :media, :parent_id, :live, :created_at, :reply_until, :replied_message_id, :auto_reply,
+      :id, :text, :from, :media, :parent_id, :live, :created_at, :reply_until, :replied_message_id,
       keyword_init: true
     ) do
       def self.from(hash)
