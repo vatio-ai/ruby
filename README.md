@@ -191,13 +191,13 @@ separate require, so an app that only signs tokens never loads it:
 require "vatio/server"
 
 Vatio::Server.configure do |c|
-  c.server_key     = ENV.fetch("VATIO_SERVER_KEY")       # vsk_..., from `vatio keys create`
+  c.server_key     = ENV.fetch("VATIO_SERVER_KEY")       # vsk_..., from `vatio keys create secret`
   c.workspace      = "acme"                               # defaults to Vatio::Identity's audience
   c.webhook_secret = ENV["VATIO_WEBHOOK_SECRET"]          # whsec_..., for the receiver below
 end
 ```
 
-A server key belongs to one workspace and one environment, and a preview key
+A secret key belongs to one workspace and one environment, and a preview key
 can only write to a test phone verified in the inbox's Try the agent panel (WhatsApp). Keep
 it on your server: it can message your customers. Net::HTTP does the talking
 (`base_url`, `open_timeout` and `read_timeout` are there if you need them);
