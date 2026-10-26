@@ -12,6 +12,8 @@ require_relative "server/transport"
 require_relative "server/client"
 require_relative "server/webhook"
 require_relative "server/webhook_receiver"
+require_relative "server/job"
+require_relative "server/async_tool"
 
 module Vatio
   # The part of this gem that talks to Vatio, and only if you ask for it:
@@ -20,7 +22,8 @@ module Vatio
   #
   # Your backend calls the server API with a server key (`vsk_`) to have the
   # agent write to someone first -- an order that shipped, an appointment
-  # tomorrow -- and hears back through a signed webhook.
+  # tomorrow -- and hears back through a signed webhook. And it reports on
+  # the jobs its async tools started (Job, AsyncTool), which needs no key.
   #
   #   require "vatio/server"
   #
@@ -83,4 +86,9 @@ if defined?(ActiveJob)
   Vatio::Server.autoload(:SendMessageJob, File.expand_path("server/send_message_job", __dir__))
 elsif defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
   ActiveSupport.on_load(:active_job) { require_relative "server/send_message_job" }
+end
+# So a Job can be an ActiveJob argument. Once ActiveJob::Base loads, which in
+# a Rails app is after this file and runs this at once if it already has.
+if defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
+  ActiveSupport.on_load(:active_job) { require_relative "server/job_serializer" }
 end

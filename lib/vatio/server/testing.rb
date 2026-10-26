@@ -52,8 +52,15 @@ module Vatio
         "instagram_not_connected" => 409, "unknown_recipient" => 422, "templates_not_supported" => 422,
         "not_a_test_account" => 422, "comment_not_found" => 404, "comment_reply_expired" => 422,
         "comment_already_replied" => 409, "comment_recipient_mismatch" => 422, "comments_not_enabled" => 409,
-        "comments_need_live_key" => 409
+        "comments_need_live_key" => 409, "job_closed" => 409, "unknown_job" => 404, "result_too_large" => 413
       }.freeze
+
+      # A job's callback, as the fake received it: `kind` is :progress or
+      # :result, and `body` what was posted.
+      Callback = Struct.new(:job_id, :kind, :body, keyword_init: true) do
+        def result? = kind == :result
+        def progress? = kind == :progress
+      end
 
       # `fail_next!(:timeout)` and `fail_next!(:network_error)` raise in the
       # transport, as a socket would, rather than answering at all.
@@ -73,6 +80,8 @@ module Vatio
             Server.config.server_key = "vsk_test_fake" if Server.config.server_key.to_s.strip.empty?
             Server.config.workspace = "test" if Server.config.workspace.nil?
             Server.transport = FakeTransport.new
+            @previous[:sleeper] = Job.instance_variable_get(:@sleeper)
+            Job.sleeper = ->(_seconds) { }
           end
           reset!
           return self unless block_given?
@@ -88,6 +97,7 @@ module Vatio
           return unless faking?
 
           Server.transport = @previous[:transport]
+          Job.sleeper = @previous[:sleeper]
           Server.config.server_key = @previous[:server_key]
           Server.config.workspace = @previous[:workspace]
           @previous = nil
@@ -110,6 +120,29 @@ module Vatio
 
         # Every request, reads included: [method, path, body].
         def requests = faking? ? fake.requests : []
+
+        # What your code posted to the jobs' callback URLs, oldest first.
+        def callbacks = faking? ? fake.callbacks : []
+
+        # A job as Vatio would hand one to your async tool's endpoint, to
+        # pass to the code under test. Its callbacks land in `callbacks`.
+        #
+        #   job = Vatio::Server::Testing.job
+        #   MatchTherapistsJob.perform_now(job, reason: "anxiety", area: "Ñuñoa")
+        #   assert_equal "ok", Vatio::Server::Testing.callbacks.last.body["result"]
+        def job(id: "job_test#{rand(1_000_000)}", expires_in: 600)
+          Job.new(id: id, callback_url: "#{Server.config.base_url!}#{Job::CALLBACK_PATH}test-#{id}",
+            expires_at: Time.now + expires_in)
+        end
+
+        # The headers Vatio calls an async tool with, for a request test of
+        # its endpoint:
+        #
+        #   post "/vatio/match", params: { reason: "anxiety" }, headers: Vatio::Server::Testing.job_headers(job)
+        def job_headers(job = self.job)
+          { Job::HEADER_ID => job.id, Job::HEADER_CALLBACK_URL => job.callback_url,
+            Job::HEADER_EXPIRES_AT => job.expires_at&.utc&.iso8601 }.compact
+        end
 
         # The next call answers with this refusal instead -- any call, so
         # `fail_next!(:not_found)` before `message_status` works too.
@@ -164,7 +197,7 @@ module Vatio
       # answered from memory.
       class FakeTransport
         attr_accessor :fail_next
-        attr_reader :messages, :requests
+        attr_reader :messages, :requests, :callbacks
 
         def initialize
           @lock = Mutex.new
@@ -177,6 +210,7 @@ module Vatio
             @payloads = {}
             @by_key = {}
             @requests = []
+            @callbacks = []
             @fail_next = nil
             @next_id = 0
           end
@@ -201,6 +235,8 @@ module Vatio
         private
 
         def route(method, path, query, params, headers)
+          return job_callback(path, params) if method == "post" && path.start_with?(Job::CALLBACK_PATH)
+
           shown = method == "get" && path[%r{\Amessages/(\d+)\z}, 1]
           if method == "post" && path == "messages" then create(params, headers["Idempotency-Key"])
           elsif method == "get" && path == "messages" then list(query)
@@ -276,6 +312,30 @@ module Vatio
           ).freeze
           json(202, payload)
         end
+
+        # As the callback endpoint answers: progress 202 while the job runs,
+        # the result 200 once, the same result again 200 with `duplicate`,
+        # anything after a different end 409.
+        def job_callback(path, params)
+          job_id = path.delete_prefix(Job::CALLBACK_PATH)[/\Atest-(.+)\z/, 1]
+          finished = @callbacks.find { |callback| callback.job_id == job_id && callback.result? }
+          progress = params.key?("progress") && !params.key?("result")
+
+          if finished
+            if progress || finished.body != params
+              return refusal(409, "job_closed", "Job #{job_id} already ended.", status: finished_status(finished.body))
+            end
+
+            return json(200, { job_id: job_id, status: finished_status(params), duplicate: true })
+          end
+
+          @callbacks << Callback.new(job_id: job_id, kind: progress ? :progress : :result, body: params).freeze
+          return json(202, { job_id: job_id, status: "pending" }) if progress
+
+          json(200, { job_id: job_id, status: finished_status(params) })
+        end
+
+        def finished_status(body) = body["result"] == "error" ? "failed" : "completed"
 
         def comments(query)
           items = Testing.instagram_comments.map { |item| JSON.parse(JSON.generate(item)) }

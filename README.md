@@ -14,7 +14,7 @@ know who your users are and your backend is Rails, your coding agent can set
 this gem up for it. See [vatio.ai](https://vatio.ai).
 
 ```ruby
-gem "vatio-sdk", "~> 0.6"
+gem "vatio-sdk", "~> 0.7"
 ```
 
 On [RubyGems](https://rubygems.org/gems/vatio-sdk) from 0.6.0. Until then it was
@@ -406,6 +406,76 @@ expect { Order.ship!(order) }.to have_sent_message(to: order.phone, brief: a_str
 ```
 
 See [Messages](https://vatio.ai/docs/api/messages) for the API itself.
+
+## Async tools
+
+A tool declared `async:` in its `tools/*.yml` is one whose work takes longer
+than a reply can wait: Vatio calls your endpoint with a job, your endpoint
+answers 202 at once, and your worker posts the result when it has it. The
+agent tells the person it is on it, knows the job is running on every turn,
+and gives them the result in the same conversation, on any channel
+([Long-running tools](https://vatio.ai/docs/guides/ai-agent-long-running-tools)).
+It is part of `require "vatio/server"`, and needs no server key: the job's
+callback URL is signed and names that one job.
+
+```ruby
+class Vatio::MatchesController < ApplicationController
+  include Vatio::Server::AsyncTool
+  before_action :check_tool_key            # the tool's own Authorization, as for any tool
+
+  def create
+    MatchTherapistsJob.perform_later(vatio_job, reason: params[:reason], area: params[:area])
+    accept_vatio_job(message: "Finding matches; this usually takes about two minutes.")
+  end
+end
+
+class MatchTherapistsJob < ApplicationJob
+  def perform(vatio_job, reason:, area:)
+    vatio_job.run do |job|
+      job.progress("Reviewing 12 therapists in your area", notify: true)
+      therapists = Therapists.match(reason, area)
+      { result: "ok", message: "#{therapists.size} found", data: { therapists: therapists.map(&:to_h) } }
+    end
+  end
+end
+```
+
+- **`vatio_job`** reads the job from the request (`X-Vatio-Job-Id`,
+  `X-Vatio-Callback-Url`), or is nil when the call carries none: answer as any
+  tool then. A callback URL on any host but Vatio's raises
+  `InvalidRequest`, so a forged request cannot send your worker's results
+  elsewhere. **`accept_vatio_job`** answers 202; its `message` reaches the
+  agent.
+- **The job is an ActiveJob argument** as it is. For another queue, store
+  `job.to_h` and rebuild it with `Vatio::Server::Job.from(hash)`. Your queue
+  stores the callback URL: treat it as a secret (`inspect` leaves it out).
+- **`run`** posts what the block returns as the result: the body your
+  endpoint would have answered had it been fast, read through the tool's
+  `respond:`. If the block raises, the job is reported failed, so the
+  person hears now rather than at the timeout, and the error is raised on
+  for your queue. If the job is over while it runs (it timed out, or the
+  person called it off) it stops and returns nil.
+- **By hand:** `progress(text, notify:)`, `complete(message:, data:)`,
+  `failed(message, error_key:)` and `respond(hash)`. Each returns the job's
+  `status` and whether the result was a `duplicate?`. Vatio unreachable or
+  rate limiting is retried three times in the call, over about 20 seconds,
+  rather than by your queue, which would redo the work. `JobClosed` means
+  the job is over: stop.
+
+In tests, `Vatio::Server::Testing.job` builds a job to pass to your code,
+`job_headers(job)` the headers for a request test of the endpoint, and
+`callbacks` is what your code posted:
+
+```ruby
+setup { Vatio::Server::Testing.fake! }
+
+test "matches are reported" do
+  MatchTherapistsJob.perform_now(Vatio::Server::Testing.job, reason: "anxiety", area: "Ñuñoa")
+  result = Vatio::Server::Testing.callbacks.last
+  assert result.result?
+  assert_equal "ok", result.body["result"]
+end
+```
 
 ## What it does not do
 

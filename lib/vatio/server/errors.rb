@@ -34,6 +34,8 @@ module Vatio
         when "rate_limited" then RateLimited
         when "invalid_key", "workspace_forbidden" then Unauthorized
         when "not_found" then NotFound
+        when "job_closed", "unknown_job" then JobClosed
+        when "invalid_callback_url", "invalid_progress", "invalid_body", "result_too_large" then InvalidRequest
         else
           case status.to_i
           when 401, 403 then Unauthorized
@@ -99,6 +101,12 @@ module Vatio
 
     # A message id this key's workspace and environment do not have.
     NotFound = Class.new(Error)
+
+    # A job (Vatio::Server::Job) that is over for the conversation: it timed
+    # out, the person called it off, or its callback URL expired a day after
+    # its timeout. Nothing posted to it reaches anyone, so stop working on
+    # it; `Job#run` does.
+    JobClosed = Class.new(Error)
 
     # Any other 409: the idempotency key was already used for a different
     # message (`details["message_id"]` names it), the conversation is
