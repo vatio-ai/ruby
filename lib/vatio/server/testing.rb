@@ -47,6 +47,7 @@ module Vatio
         "template_params" => 422, "content_required" => 422, "brief_too_long" => 422, "text_too_long" => 422,
         "invalid_recipient" => 422, "not_a_test_phone" => 422, "identity_not_configured" => 422,
         "invalid_identity" => 422, "whatsapp_not_connected" => 409, "whatsapp_paused" => 409,
+        "whatsapp_number_unhealthy" => 409,
         "idempotency_conflict" => 409, "identity_conflict" => 409, "invalid_key" => 401,
         "workspace_forbidden" => 403, "not_found" => 404, "rate_limited" => 429, "unavailable" => 503,
         "instagram_not_connected" => 409, "unknown_recipient" => 422, "templates_not_supported" => 422,

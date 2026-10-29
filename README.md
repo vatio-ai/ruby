@@ -295,7 +295,7 @@ end
 | `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_required` |
 | `InvalidRequest` | Any other 422: `invalid_recipient`, `content_required`, `invalid_identity`, `not_a_test_phone`… |
 | `Unauthorized` | 401 / 403: the key is wrong, revoked, or another workspace's |
-| `Conflict` | Any other 409: `idempotency_conflict` (`details["message_id"]`), `identity_conflict`, `whatsapp_not_connected`, `whatsapp_paused` |
+| `Conflict` | Any other 409: `idempotency_conflict` (`details["message_id"]`), `identity_conflict`, `whatsapp_not_connected`, `whatsapp_paused`, `whatsapp_number_unhealthy` (Meta refuses every send from the number; `details["issue"]` says why and the fix) |
 | `NotFound` | `message_status` with an id this key cannot see |
 | `RateLimited` | 429, more than 60 a minute on one key |
 | `Unavailable` | 5xx, timeouts, refused connections |
