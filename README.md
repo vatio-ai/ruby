@@ -235,6 +235,13 @@ you:
   Vatio::Server.send_message(to: phone, brief: brief, template: shipped.with_params("Ana", "#1042"))
   ```
 
+  A URL button whose link ends in `{{1}}` takes its value per message, by
+  the button's position (`template.buttons` lists them):
+
+  ```ruby
+  template: offer.with_params("Ana").merge(buttons: [{ index: 0, params: [offer.code] }])
+  ```
+
 The response only says it is queued: the agent's turn and Meta's delivery
 both happen after it. `Vatio::Server.message_status(id)` reads it back,
 with `content` (what reached the phone) once it is sent, and
@@ -294,7 +301,7 @@ end
 | `OutsideWindow` | `outside_window`, with `last_inbound_at` |
 | `OptedOut` | `opted_out` |
 | `HumanAnswering` | `human_takeover`, `handoff_pending` |
-| `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_required` |
+| `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_buttons`, `template_required` |
 | `InvalidRequest` | Any other 422: `invalid_recipient`, `content_required`, `invalid_identity`, `not_a_test_phone`… |
 | `Unauthorized` | 401 / 403: the key is wrong, revoked, or another workspace's |
 | `Conflict` | Any other 409: `idempotency_conflict` (`details["message_id"]`), `identity_conflict`, `whatsapp_not_connected`, `whatsapp_paused`, `whatsapp_number_unhealthy` (Meta refuses every send from the number; `details["issue"]` says why and the fix) |

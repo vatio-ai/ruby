@@ -35,8 +35,10 @@ module Vatio
       #           Needs no `to` or `channel`.
       # brief:    what the agent should write about, and the facts to use.
       # text:     your own words, sent as is.
-      # template: { name:, language:, params: [] }, used only when the 24-hour
-      #           window is closed -- send it too to always reach the person.
+      # template: { name:, language:, params: [], buttons: [{ index:, params: [] }] },
+      #           used only when the 24-hour window is closed -- send it too
+      #           to always reach the person. `buttons` fills URL buttons
+      #           whose link ends in {{1}}.
       #           An authentication template takes `code:` instead of params,
       #           with no brief or text, and is sent whatever the window.
       #
@@ -149,7 +151,18 @@ module Vatio
       def normalize_template(template)
         hash = template.to_h.transform_keys(&:to_s)
         { name: hash["name"], language: hash["language"], params: Array(hash["params"]).map(&:to_s),
-          code: hash["code"]&.to_s }.compact
+          code: hash["code"]&.to_s, buttons: normalize_buttons(hash["buttons"]) }.compact
+      end
+
+      # [{ index: 0, params: ["ABC123"] }]: the value of each URL button whose
+      # link ends in {{1}}, by its position.
+      def normalize_buttons(buttons)
+        return nil if buttons.nil? || buttons.empty?
+
+        buttons.map do |button|
+          button = button.to_h.transform_keys(&:to_s)
+          { index: button["index"], params: Array(button["params"]).map(&:to_s) }
+        end
       end
 
       def present(value)
