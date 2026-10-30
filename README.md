@@ -198,8 +198,10 @@ end
 ```
 
 A secret key belongs to one workspace and one environment, and a preview key
-can only write to a test phone verified in the inbox's Try the agent panel (WhatsApp). Keep
-it on your server: it can message your customers. Net::HTTP does the talking
+can only write, from Vatio's shared WhatsApp number, to someone on the
+workspace's team with their WhatsApp verified, or to a customer phone added in
+the inbox's Try the agent panel (WhatsApp). Keep it on your server: it can
+message your customers. Net::HTTP does the talking
 (`base_url`, `open_timeout` and `read_timeout` are there if you need them);
 there is no other dependency.
 
