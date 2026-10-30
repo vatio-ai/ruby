@@ -13,9 +13,15 @@ module Vatio
     #
     #   template: offer.with_params("Ana").merge(buttons: [{ index: 0, params: ["ABC123"] }])
     #
+    # Anything else it takes (a header, named parameters, a coupon code) goes
+    # as Meta's own send components; `example` shows them:
+    #
+    #   template: { name: t.name, language: t.language, components: [...] }
+    #
     # Empty on a preview key: the preview number's templates are Vatio's.
     Template = Struct.new(
-      :name, :language, :category, :status, :rejected_reason, :body, :parameter_count, :buttons, :example,
+      :name, :language, :category, :status, :rejected_reason, :body, :parameter_count, :parameter_format, :buttons,
+      :components, :example,
       keyword_init: true
     ) do
       def self.from(hash) = Value.build(self, hash)

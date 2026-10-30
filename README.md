@@ -242,6 +242,17 @@ you:
   template: offer.with_params("Ana").merge(buttons: [{ index: 0, params: [offer.code] }])
   ```
 
+  Anything else a template takes (a media or text header, named
+  parameters, a coupon code) goes as Meta's own send components, as each
+  template's `example` shows:
+
+  ```ruby
+  template: { name: "ati_offer", language: "es", components: [
+    { type: "header", parameters: [{ type: "image", image: { link: photo_url } }] },
+    { type: "body", parameters: [{ type: "text", parameter_name: "name", text: "Ana" }] }
+  ] }
+  ```
+
 The response only says it is queued: the agent's turn and Meta's delivery
 both happen after it. `Vatio::Server.message_status(id)` reads it back,
 with `content` (what reached the phone) once it is sent, and
@@ -301,7 +312,7 @@ end
 | `OutsideWindow` | `outside_window`, with `last_inbound_at` |
 | `OptedOut` | `opted_out` |
 | `HumanAnswering` | `human_takeover`, `handoff_pending` |
-| `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_buttons`, `template_required` |
+| `TemplateError` | `template_not_found` (often created in Meta a minute ago: Vatio is syncing, retry shortly), `template_not_approved`, `template_params`, `template_buttons`, `template_components`, `template_required` |
 | `InvalidRequest` | Any other 422: `invalid_recipient`, `content_required`, `invalid_identity`, `not_a_test_phone`… |
 | `Unauthorized` | 401 / 403: the key is wrong, revoked, or another workspace's |
 | `Conflict` | Any other 409: `idempotency_conflict` (`details["message_id"]`), `identity_conflict`, `whatsapp_not_connected`, `whatsapp_paused`, `whatsapp_number_unhealthy` (Meta refuses every send from the number; `details["issue"]` says why and the fix) |

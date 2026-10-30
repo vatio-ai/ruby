@@ -38,7 +38,9 @@ module Vatio
       # template: { name:, language:, params: [], buttons: [{ index:, params: [] }] },
       #           used only when the 24-hour window is closed -- send it too
       #           to always reach the person. `buttons` fills URL buttons
-      #           whose link ends in {{1}}.
+      #           whose link ends in {{1}}. Or { name:, language:, components: [] }
+      #           with Meta's own send components, for anything else a
+      #           template takes (a header, named parameters, a coupon code).
       #           An authentication template takes `code:` instead of params,
       #           with no brief or text, and is sent whatever the window.
       #
@@ -150,6 +152,10 @@ module Vatio
       # Accepts a Hash with symbol or string keys, or anything with `to_h`.
       def normalize_template(template)
         hash = template.to_h.transform_keys(&:to_s)
+        if hash.key?("components")
+          return { name: hash["name"], language: hash["language"], components: Array(hash["components"]) }
+        end
+
         { name: hash["name"], language: hash["language"], params: Array(hash["params"]).map(&:to_s),
           code: hash["code"]&.to_s, buttons: normalize_buttons(hash["buttons"]) }.compact
       end
